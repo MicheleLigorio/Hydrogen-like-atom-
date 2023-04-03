@@ -1,0 +1,307 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import constants
+import random
+
+a0 = 5.291777721092e-11
+h_bar = constants.hbar
+m = constants.m_e    #preferisco usare la massa dell'elettrone invece della massa ridotta (per gli isotopi)
+e = constants.e
+eps0 = constants.epsilon_0
+
+
+#poniamo l = 0
+print("Inserire valore di n (intero maggiore o uguale a uno): ") #numero quantico principale
+n = int(input())
+print("Inserire valore di l (intero maggiore o uguale a zero): ") #momento angolare
+l = int(input())
+print("Inserire valore di Z (intero maggiore o uguale a uno): ") #numero atomico
+Z = int(input())
+
+
+#creazione della griglia in funzione della scelta di n ("mul", ossia multiplo di a0)
+
+if n ==1:
+    mul = int(8)
+elif n==2:
+    mul = int(20)
+elif n==3:
+    mul = int(40)
+else:
+    mul = int(50)
+
+N = 2000
+r = np.linspace(1e-20, mul*a0, N)
+h = np.zeros(N-1)
+for i in range(0, N-1):
+    h[i] = r[i+1]-r[i]
+
+
+EI = -((Z**2)*((constants.Rydberg*constants.h*constants.c)/1.6022e-19))/(n**2) #valori teorici dei livelli energetici
+r0_Th = n**2*(a0/Z)  #valori dei raggi secondo il modello di Bohr
+
+#parametri dell'equazione differenziale
+
+a = -1.0
+b = 0.0
+c = np.zeros(N)
+
+for j in range(0, N):
+    c[j] = (l*(l+1))/(r[j]**2)-(2*m*(Z*e**2))/((h_bar**2)*r[j]*4*np.pi*eps0)
+
+D = np.zeros(N-2)  #diagonale
+L = np.zeros(N-3)  #sotto-diagonale
+U = np.zeros(N-3)  #sopra-diagonale
+
+#occhio agli indici: vale per r[i] t.che i è diverso da 0 e N-1
+
+for i in range(0, N-2):
+    D[i] = c[i+1]-2*a/(h[i+1]*h[i])
+
+for i in range(0, N-3):
+    L[i] = 2*a/(h[i+1]*h[i]+h[i]**2)
+
+for i in range(0, N-3):
+    U[i] = 2*a/(h[i]*h[i+1]+h[i+1]**2)
+
+M = np.zeros((N-2, N-2))
+
+for i in range(0, N-2):
+    M[i, i] = D[i]
+
+for i in range(0, N-3):
+    M[i, i+1] = U[i]
+
+for i in range(0, N-3):
+    M[i+1, i] = L[i]
+
+#ricerca degli autovalori
+
+eig = np.linalg.eig(M)[0]
+
+E = (h_bar**2)/(2*m)*eig
+
+#per i risultati in eV
+
+E_eV = E/1.6022e-19
+
+num = 0
+
+for i in range(0, N-2):
+    if E_eV[i] < 0:
+        num = num+1
+
+    else:
+        continue
+
+
+index = np.zeros(num, dtype='int32')
+energy_levels = np.zeros(num)
+j = 0
+
+for i in range(0, N-2):
+    if E_eV[i] < 0:
+        energy_levels[j] = E_eV[i]
+        index[j] = i
+        j = j+1
+
+    else:
+        continue
+
+aus = np.zeros((num, 2))
+
+for i in range(0, num):
+    aus[i, 0] = energy_levels[i]
+    aus[i, 1] = index[i]
+
+#voglio selezionare l'autovalore in relazione a n selezionato.
+
+if n-1 >= num:
+    print("Errore: non è stato trovato l'autovalore cercato (la dimensione della griglia di simulazione non è sufficiente)")
+
+elif l >= n:
+    print("Errore: l deve essere strettamente minore di n. ")
+
+else:
+    energy_level = np.sort(energy_levels)[n-l-1]
+
+    print("Il livello energetico trovato è: ", energy_level, "eV")
+    print("Il livello energetico teorico è: ", EI, "eV")
+    print("L'errore percentuale è: ", abs(((EI-energy_level)/EI)*100), "%")
+
+    eig_vect = np.linalg.eig(M)[1]
+    u = eig_vect[:, int(aus[aus[:, 0].argsort()][n-l-1, 1])]
+
+    # funzione d'onda e funzione d'onda normalizzata
+
+    psi = np.zeros(N)
+    psi0 = np.zeros(N)
+
+    for i in range(1, N - 1):
+        psi[i] = u[i - 1] / r[i]
+
+    # calcoliamo la norma della fdo (metodo dei trapezi)
+    NORM = 0
+
+    # integrazione
+    for i in range(0, N - 1):
+        NORM = NORM + ((abs(psi[i+1])**2*(r[i+1])**2+abs(psi[i])**2*(r[i])**2)/2)*h[i]
+
+    # rinormalizzazione
+    for i in range(0, N):
+        psi0[i] = psi[i] / (np.sqrt(NORM))
+
+    PDF_r = np.zeros(N)
+
+    for i in range(0, N):
+        PDF_r[i] = abs(psi0[i])**2*r[i]**2
+
+    # funzione d'onda radiale teorica
+    PDF_Th = np.zeros(N)
+
+    if n == 1 and l == 0:
+        R = 2*(np.sqrt(Z/a0))**3*np.exp(-(Z*r)/a0)
+
+    elif n == 2 and l == 0:
+        R = 2*((np.sqrt(Z/(2*a0)))**3)*(1-(Z*r)/(2*a0))*(np.exp(-(Z*r)/(2*a0)))
+
+    elif n == 2 and l == 1:
+        R = (1/np.sqrt(3))*((np.sqrt(Z/(2*a0)))**3)*((Z*r)/a0)*(np.exp(-(Z*r)/(2*a0)))
+
+    elif n == 3 and l == 0:
+        R = 2*(np.sqrt(Z/(3*a0)))**3*(1-(2*Z*r)/(3*a0)+(2*(Z*r)**2)/(27*a0**2))*(np.exp(-(Z*r)/(3*a0)))
+
+    elif n == 3 and l == 1:
+        R = (4*np.sqrt(2)/3)*(np.sqrt(Z/(3*a0)))**3*((Z*r)/a0)*(1-(Z*r)/(6*a0))*(np.exp(-(Z*r)/(3*a0)))
+
+    elif n==3 and l == 2:
+        R = ((2*np.sqrt(2))/(27*np.sqrt(5)))*(np.sqrt(Z/(3*a0)))**3*((Z*r)/a0)**2*(np.exp(-(Z*r)/(3*a0)))
+
+    else:
+        print("Grafico non disponibile. ")
+        R = np.zeros(N)
+
+    PDF_Th = abs(R)**2*r** 2
+
+    diff = (PDF_Th-PDF_r)/PDF_Th
+
+    #calcolo del valor medio della distanza dal nucleo (usiamo di nuovo il metodo dei trapezi)
+
+    r00 = 0
+
+    for i in range(0, N-1):
+        r00 = r00 + ((r[i]*PDF_r[i+1]+r[i]*PDF_r[i])/2)*h[i]
+
+    print("Il valor medio della distanza dal nucleo (simulato) è: ", r00/1e-10,"Å")
+    print("Il raggio dell'atomo secondo il modello di Bohr è: ", r0_Th/1e-10,"Å")
+
+    # vogliamo plottare la probability-density-function
+
+    fig, axs = plt.subplots(3, sharex=True)
+    axs[0].plot(r/1e-10, PDF_r)
+    axs[0].grid()
+    axs[0].set_title("PDF simulata")
+    axs[1].plot(r/1e-10, PDF_Th, 'red')
+    axs[1].grid()
+    axs[1].set_title("PDF teorica")
+    axs[2].plot(r/1e-10, diff, 'g.')
+    axs[2].grid()
+    axs[2].set_title("scarti (normalizzati)")
+    plt.xlabel("r [Å]")
+    plt.tight_layout()
+    #plt.subplot_tool()
+    plt.show()
+
+    #salvataggio delle funzioni d'onda radiali in un file (per il plot 3D)
+
+    if (n == 1 and l == 0) or (n == 2 and l == 1) or (n == 3 and l == 2):
+
+        N0 = 100
+        r0 = np.zeros(N0)
+        PDF_r0 = np.zeros(N0)
+        j = int(0)
+
+        for i in range(0, N):
+            if (i + 1) % 20 == 0:
+                r0[j] = r[i]
+                PDF_r0[j] = PDF_r[i]
+                j = j + 1
+            else:
+                continue
+
+        theta = np.linspace(1e-20, 2*np.pi, N0)
+        phi = np.linspace(0, np.pi, N0)
+
+        PDF0 = np.zeros((N0, N0, N0))
+
+        if n == 1 and l == 0:
+            for i1 in range(0, N0):
+                for i2 in range(0, N0):
+                    for i3 in range(0, N0):
+                        PDF0[i1, i2, i3] = PDF_r0[i1]*(1/np.sqrt(4*np.pi))**2*np.sin(phi[i3])
+
+        elif n ==2 and l == 1:
+            for i1 in range(0, N0):
+                for i2 in range(0, N0):
+                    for i3 in range(0, N0):
+                        PDF0[i1, i2, i3] = PDF_r0[i1]*((np.sqrt(3/(8*np.pi)))*np.sin(theta[i2]))**2*(np.sin(phi[i3]))
+
+        elif n == 3 and l == 2:
+            for i1 in range(0, N0):
+                for i2 in range(0, N0):
+                    for i3 in range(0, N0):
+                        PDF0[i1, i2, i3] = PDF_r0[i1]+(15/(8*np.pi))*(np.sin(theta[i2])**2)**2*np.sin(phi[i3])
+
+        PDF = PDF0.reshape((N0 * N0 * N0,))
+        PDF_max = np.max(PDF)
+
+        # voglio generare dei punti casuali con il metodo accetta/nega che seguono questa distribuzione
+
+        generated_r = np.array(0)
+        generated_theta = np.array(0)
+        generated_phi = np.array(0)
+
+        for i in range(0, 60000):
+            index1 = random.randint(0, N0 - 1)  # genero un indice casuale
+            index2 = random.randint(0, N0 - 1)
+            index3 = random.randint(0, N0 - 1)
+            r1_r = r[index1]  # "raggio" casuale
+            r1_theta = theta[index2]  # theta casuale
+            r1_phi = phi[index3]  # phi casuale
+            r2 = random.random()
+            if r2 < PDF0[index1, index2, index3] / PDF_max:
+                generated_r = np.append(generated_r, [r1_r])
+                generated_theta = np.append(generated_theta, [r1_theta])
+                generated_phi = np.append(generated_phi, [r1_phi])
+            else:
+                continue
+
+        generated_x = np.zeros(generated_r.size)
+        generated_y = np.zeros(generated_theta.size)
+        generated_z = np.zeros(generated_phi.size)
+
+        for i in range(0, generated_r.size):
+            generated_x[i] = generated_r[i]*np.sin(generated_phi[i])*np.cos(generated_theta[i])
+            generated_y[i] = generated_r[i]*np.sin(generated_phi[i])*np.sin(generated_theta[i])
+            generated_z[i] = generated_r[i]*np.cos(generated_phi[i])
+
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.plot3D(generated_x / 1e-10, generated_y / 1e-10, generated_z / 1e-10, '.')
+        ax.set_xlabel("x [Å]")
+        ax.set_ylabel("y [Å]")
+        ax.set_zlabel("z [Å]")
+
+        if n == 1:
+            TITOLO = "ORBITALE 1S"
+        elif n == 2:
+            TITOLO = "ORBITALE 2P"
+        else:
+            TITOLO = "ORBITALE 3D"
+
+        plt.title(TITOLO, fontsize=15)
+
+        plt.show()
+
+    else:
+        Y = 0
